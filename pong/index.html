@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong | Jan Hendrik Dahlhues</title>
+  <link rel="shortcut icon" href="../img/favicon.png" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      background: radial-gradient(circle at top, #1f2937, #030712 70%);
+      font-family: Arial, sans-serif;
+      color: #fff;
+    }
+
+    .game-wrap {
+      width: min(95vw, 900px);
+      text-align: center;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 18px;
+      color: #cbd5e1;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .back-link:hover {
+      color: #fff;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 5vw, 48px);
+      letter-spacing: 2px;
+    }
+
+    .hint {
+      margin: 0 0 14px;
+      color: #cbd5e1;
+      font-size: 15px;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 3px solid #e5e7eb;
+      border-radius: 14px;
+      background: #020617;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      cursor: none;
+      touch-action: none;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    button,
+    select {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      background: #e5e7eb;
+      cursor: pointer;
+    }
+
+    button:hover,
+    select:hover {
+      background: #fff;
+    }
+
+    .small {
+      margin-top: 10px;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-wrap">
+    <a class="back-link" id="back-link" href="/">Back to dahlhues.com</a>
+    <h1>Pong vs Bot</h1>
+    <p class="hint">Move with mouse/touch, or use W/S / Up/Down. First to 7 wins.</p>
+
+    <canvas id="game" width="900" height="520" aria-label="Pong game canvas"></canvas>
+
+    <div class="controls">
+      <button id="startBtn">Start Game</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="resetBtn">Reset</button>
+      <select id="difficulty" aria-label="Difficulty">
+        <option value="easy">Easy Bot</option>
+        <option value="normal" selected>Normal Bot</option>
+        <option value="hard">Hard Bot</option>
+      </select>
+    </div>
+
+    <p class="small">Static page route: <code>/pong</code></p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const difficultySelect = document.getElementById("difficulty");
+
+    const WINNING_SCORE = 7;
+
+    const player = {
+      x: 28,
+      y: canvas.height / 2 - 55,
+      w: 14,
+      h: 110,
+      score: 0,
+      speed: 8
+    };
+
+    const bot = {
+      x: canvas.width - 42,
+      y: canvas.height / 2 - 55,
+      w: 14,
+      h: 110,
+      score: 0
+    };
+
+    const ball = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      r: 10,
+      speed: 6,
+      vx: 6,
+      vy: 3
+    };
+
+    let running = false;
+    let paused = false;
+    let gameOver = false;
+    let message = "Press Start";
+    let keys = {};
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function getBotSpeed() {
+      const difficulty = difficultySelect.value;
+      if (difficulty === "easy") return 4.1;
+      if (difficulty === "hard") return 7.4;
+      return 5.6;
+    }
+
+    function resetBall(direction = Math.random() > 0.5 ? 1 : -1) {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.speed = 6;
+      ball.vx = direction * ball.speed;
+      ball.vy = (Math.random() * 5 - 2.5) || 3;
+    }
+
+    function resetGame() {
+      player.y = canvas.height / 2 - player.h / 2;
+      bot.y = canvas.height / 2 - bot.h / 2;
+      player.score = 0;
+      bot.score = 0;
+      gameOver = false;
+      paused = false;
+      message = "Press Start";
+      resetBall();
+      draw();
+    }
+
+    function startGame() {
+      if (gameOver) resetGame();
+      running = true;
+      paused = false;
+      message = "";
+    }
+
+    function togglePause() {
+      if (!running || gameOver) return;
+      paused = !paused;
+      message = paused ? "Paused" : "";
+    }
+
+    function drawRoundedRect(x, y, w, h, radius) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, radius);
+      ctx.fill();
+    }
+
+    function drawCenterLine() {
+      ctx.setLineDash([12, 16]);
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 20);
+      ctx.lineTo(canvas.width / 2, canvas.height - 20);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawText(text, x, y, size = 32, alpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "white";
+      ctx.font = `700 ${size}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawCenterLine();
+
+      drawText(player.score, canvas.width * 0.25, 55, 48, 0.8);
+      drawText(bot.score, canvas.width * 0.75, 55, 48, 0.8);
+
+      ctx.fillStyle = "#38bdf8";
+      drawRoundedRect(player.x, player.y, player.w, player.h, 8);
+
+      ctx.fillStyle = "#f97316";
+      drawRoundedRect(bot.x, bot.y, bot.w, bot.h, 8);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (message) {
+        ctx.fillStyle = "rgba(2,6,23,0.72)";
+        drawRoundedRect(canvas.width / 2 - 180, canvas.height / 2 - 48, 360, 96, 18);
+        drawText(message, canvas.width / 2, canvas.height / 2, 34);
+      }
+    }
+
+    function movePlayer() {
+      if (keys.ArrowUp || keys.w || keys.W) player.y -= player.speed;
+      if (keys.ArrowDown || keys.s || keys.S) player.y += player.speed;
+      player.y = clamp(player.y, 0, canvas.height - player.h);
+    }
+
+    function moveBot() {
+      const botCenter = bot.y + bot.h / 2;
+      const target = ball.y;
+      const botSpeed = getBotSpeed();
+
+      if (botCenter < target - 12) bot.y += botSpeed;
+      if (botCenter > target + 12) bot.y -= botSpeed;
+
+      bot.y = clamp(bot.y, 0, canvas.height - bot.h);
+    }
+
+    function paddleCollision(paddle) {
+      return (
+        ball.x - ball.r < paddle.x + paddle.w &&
+        ball.x + ball.r > paddle.x &&
+        ball.y + ball.r > paddle.y &&
+        ball.y - ball.r < paddle.y + paddle.h
+      );
+    }
+
+    function bounceOffPaddle(paddle, isPlayer) {
+      const paddleCenter = paddle.y + paddle.h / 2;
+      const hitPosition = (ball.y - paddleCenter) / (paddle.h / 2);
+      const angle = hitPosition * 0.85;
+
+      ball.speed = Math.min(ball.speed + 0.35, 12);
+      ball.vx = (isPlayer ? 1 : -1) * ball.speed;
+      ball.vy = angle * ball.speed;
+
+      if (isPlayer) ball.x = paddle.x + paddle.w + ball.r;
+      else ball.x = paddle.x - ball.r;
+    }
+
+    function scorePoint(winner) {
+      if (winner === "player") {
+        player.score++;
+        resetBall(1);
+      } else {
+        bot.score++;
+        resetBall(-1);
+      }
+
+      if (player.score >= WINNING_SCORE || bot.score >= WINNING_SCORE) {
+        gameOver = true;
+        running = false;
+        message = player.score > bot.score ? "You Win!" : "Bot Wins!";
+      }
+    }
+
+    function update() {
+      if (!running || paused || gameOver) return;
+
+      movePlayer();
+      moveBot();
+
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      if (ball.y - ball.r <= 0 || ball.y + ball.r >= canvas.height) {
+        ball.vy *= -1;
+        ball.y = clamp(ball.y, ball.r, canvas.height - ball.r);
+      }
+
+      if (paddleCollision(player) && ball.vx < 0) {
+        bounceOffPaddle(player, true);
+      }
+
+      if (paddleCollision(bot) && ball.vx > 0) {
+        bounceOffPaddle(bot, false);
+      }
+
+      if (ball.x + ball.r < 0) scorePoint("bot");
+      if (ball.x - ball.r > canvas.width) scorePoint("player");
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function setPlayerFromPointer(event) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / rect.height;
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+      const y = (clientY - rect.top) * scaleY;
+      player.y = clamp(y - player.h / 2, 0, canvas.height - player.h);
+    }
+
+    canvas.addEventListener("mousemove", setPlayerFromPointer);
+    canvas.addEventListener(
+      "touchmove",
+      (event) => {
+        event.preventDefault();
+        setPlayerFromPointer(event);
+      },
+      { passive: false }
+    );
+
+    window.addEventListener("keydown", (event) => {
+      keys[event.key] = true;
+      if (event.key === " ") togglePause();
+    });
+
+    window.addEventListener("keyup", (event) => {
+      keys[event.key] = false;
+    });
+
+    startBtn.addEventListener("click", startGame);
+    pauseBtn.addEventListener("click", togglePause);
+    resetBtn.addEventListener("click", () => {
+      running = false;
+      resetGame();
+    });
+
+    difficultySelect.addEventListener("change", () => {
+      if (!running) draw();
+    });
+
+    if (window.location.protocol === "file:") {
+      document.getElementById("back-link").setAttribute("href", "../index.html");
+    }
+
+    resetGame();
+    loop();
+  </script>
+</body>
+</html>

@@ -210,10 +210,11 @@
 			<div class="units-row">
 			    <div class="unit-50">
 			    </div>
-			    <div class="unit-50">
+				<div class="unit-50">
 					<ul class="social list-flat right">
-						<li><a href="mailto:janhendrik_d@gmx.de"><i class="fa fa-send"></i></a></li>
-						<li><a href="https://linkedin.com/in/dahlhues"><i class="fa fa-twitter"></i></a></li>
+						<li><a href="mailto:janhendrik_d@gmx.de" aria-label="Email" title="Email"><i class="fa fa-send"></i></a></li>
+						<li><a href="https://linkedin.com/in/dahlhues" aria-label="LinkedIn" title="LinkedIn"><i class="fa fa-linkedin-square"></i></a></li>
+						<li><a id="pong-link" href="/pong/" aria-label="Play Pong" title="Play Pong"><i class="fa fa-gamepad"></i></a></li>
 					</ul>
 			    </div>
 			</div>
@@ -231,6 +232,10 @@
 		strings: ["Innovation", "IT / CS", "Management", "Psychology"],
 
 		typeSpeed:90,backDelay:700,contentType:"html",loop:!0,resetCallback:function(){newTyped()}}),$(".reset").click(function(){$("#typed").typed("reset")})});
+
+		if (window.location.protocol === "file:") {
+			document.getElementById("pong-link").setAttribute("href", "pong/index.html");
+		}
     </script>
 </body>
 </html>
